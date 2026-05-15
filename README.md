@@ -105,18 +105,14 @@ This set uses explicit speaker--year--entity combinations. It is useful for
 testing extraction and gold alignment, but it is too easy to be the main
 transfer evaluation.
 
-## Suggested paper framing
+## Suggested framing for our draft
 
 Use the semantic set as a lightweight transfer case:
 
 > To assess whether TRACE can be reused beyond HistoriQA-ThirdRepublic, we
 > evaluate a single-hop bilingual source-discovery setting on League of Nations
 > Sampo. This tests integration with a public LOD-based historical archive rather
-> than a project-specific document store.
+> than a project-specific document store. (I will add proper citations in the paper later)
 
-See `docs/lon_semantic_latex_snippet.tex` for a draft LaTeX subsection.
 
-## Repository status
 
-This repository contains reproducible data-preparation scripts and evaluation
-inputs. It does not contain the full raw Zenodo dump or a copy of TRACE itself.
