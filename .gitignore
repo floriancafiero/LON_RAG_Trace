@@ -1,0 +1,22 @@
+# Raw Zenodo dumps are large; download them locally instead of committing.
+data/raw/
+data/processed/
+data/trace_inputs/
+*.zip
+
+# Runtime outputs
+outputs/
+runs/
+logs/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.ipynb_checkpoints/
+
+# OS/editor
+.DS_Store
+.vscode/
