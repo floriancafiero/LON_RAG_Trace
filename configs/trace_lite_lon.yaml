@@ -1,0 +1,54 @@
+task_name: lon_semantic_transfer
+
+# Single-hop transfer case over League of Nations Sampo speeches.
+# Use this as a template and adapt field names to the local TRACE codebase.
+
+subcorpora:
+  - lon_speeches
+
+inputs:
+  documents: data/trace_inputs/trace_documents.jsonl
+  questions: data/trace_inputs/trace_questions.jsonl
+
+planner:
+  enabled: true
+  max_subquestions: 1
+  force_single_subcorpus: lon_speeches
+
+replan:
+  enabled: false
+
+retrieval:
+  channels:
+    - bm25
+    - dense
+    - exact
+  temporal:
+    enabled: true
+  rrf_k: 60
+  candidate_cap_per_channel: 50
+
+agent:
+  max_steps: 4
+  review_batch_size: 3
+  verdicts:
+    - accept
+    - reject
+    - hold
+  require_json: true
+  pass_original_question: true
+  pass_subquestion: true
+
+rerank:
+  count_grouped: true
+
+metrics:
+  - R@1
+  - R@3
+  - R@5
+  - MRR
+  - P_acc
+  - R_acc
+  - mean_accepted_documents
+  - latency_per_question
+  - json_validity_rate
