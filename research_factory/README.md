@@ -101,7 +101,7 @@ python research_factory/general_factory.py init runs/project \
   --offline
 ```
 
-The current compact implementation ingests local `.txt`/`.md` examples directly. PDFs can be converted to text beforehand. Without `--offline`, local examples augment the OpenAlex sample.
+The factory ingests local `.txt`/`.md` examples directly and now extracts local PDFs automatically. For nearby OpenAlex papers, it also tries to download open-access PDFs and extract their full text (`pdftotext` when available, with an optional `pypdf` fallback); if that fails, it falls back to the abstract and records `text_scope: abstract_only`. Without `--offline`, local examples augment the OpenAlex sample.
 
 OpenAlex publication in the resolved source is used as a practical proxy for an accepted/published paper. Track/workshop distinctions can be imperfect, so for conference targeting it is worth adding hand-picked examples from the exact track when possible.
 
