@@ -111,9 +111,12 @@ Use the semantic set as a lightweight transfer case:
 
 This repository contains reproducible data-preparation scripts and TRACE-lite integration documentation. It does not contain the full raw Zenodo dump or a copy of TRACE itself.
 
+## Research Factory
 
-## Automated research workflow
+A reusable **venue-adaptive multi-agent Research Factory** is available in [`research_factory/`](research_factory/). It is no longer tied to TRACE: it supports computational social science, NLP/TAL, digital humanities, historical NLP, computational literary studies, IR/RAG, and mixed projects.
 
-A TRACE-specific multi-agent research/paper workflow is available in [\`research_factory/\`](research_factory/). It is configured for DeepSeek through OpenRouter and adapts the *Paper Factory* architecture to retrieval evaluation: six parallel findings streams, critic/revision loops, matched-budget agentic ablations, bilingual transfer, efficiency/error/robustness analysis, an optional JEV-controller extension, and three hard scientific gates before final human review.
+Given an idea, data/material, and a target venue, the generic engine retrieves nearby papers published in that venue (or uses hand-picked accepted examples), builds a local venue profile, combines discipline-specific methodological packs, and adapts the research streams, missing-evidence extensions, paper architecture, mock review, drafting, and scientific audits accordingly.
 
-See [\`research_factory/README.md\`](research_factory/README.md) for the quick start.
+TRACE/LoN remains available as the earlier `research_factory/trace_factory.py` workflow, while `research_factory/general_factory.py` is the reusable cross-disciplinary engine.
+
+See [`research_factory/README.md`](research_factory/README.md) for usage and examples.
