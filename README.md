@@ -110,3 +110,10 @@ Use the semantic set as a lightweight transfer case:
 ## Repository status
 
 This repository contains reproducible data-preparation scripts and TRACE-lite integration documentation. It does not contain the full raw Zenodo dump or a copy of TRACE itself.
+
+
+## Automated research workflow
+
+A TRACE-specific multi-agent research/paper workflow is available in [\`research_factory/\`](research_factory/). It is configured for DeepSeek through OpenRouter and adapts the *Paper Factory* architecture to retrieval evaluation: six parallel findings streams, critic/revision loops, matched-budget agentic ablations, bilingual transfer, efficiency/error/robustness analysis, an optional JEV-controller extension, and three hard scientific gates before final human review.
+
+See [\`research_factory/README.md\`](research_factory/README.md) for the quick start.
