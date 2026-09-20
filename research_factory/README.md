@@ -1,65 +1,163 @@
-# TRACE Research Factory
+# Venue-Adaptive Research Factory
 
-A runnable, resumable multi-agent research workflow adapted to **TRACE / TRACE-lite** and this repository's League of Nations bilingual source-discovery transfer case. It follows the broad architecture in Engzell & Wilmers' *The Paper Factory* (2026)—fresh narrow agents, parallel findings streams, critic/revision loops, hard gates, competing paper architectures and late audits—but the implementation and TRACE-specific prompts here are independent.
+This directory now contains two workflows:
 
-The factory is deliberately small and dependency-free beyond Python itself. It uses DeepSeek through OpenRouter by default, matching the existing TRACE workflow choice, and can also call a local coding-agent wrapper.
+- `general_factory.py`: the reusable workflow for computational social science, NLP/TAL, digital humanities, historical NLP, computational literary studies, IR/RAG, and mixed projects.
+- `trace_factory.py`: the earlier TRACE/League-of-Nations-specific workflow, kept for compatibility.
 
-## TRACE-specific streams
+The generic factory is based on the same broad multi-agent principles as Engzell & Wilmers' *Paper Factory*: narrow fresh-context agents, parallel research packages, adversarial review, hard gates, explicit evidence ledgers, and late audits. The important change is that the workflow is **adapted per project and per target venue** instead of hard-coding one research style.
 
-The six independent findings streams cover retrieval-channel ablations; agentic-vs-non-agentic comparisons under matched compute; EN/FR bilingual transfer; quality–latency–token/cost trade-offs and stopping; error/calibration analysis; and robustness/reproducibility. Extensions include a **JEV-style controller** for continue/stop/escalate or retrieval granularity. JEV remains optional: without callable JEV code the agent must produce an integration/experiment specification, not results.
+## What adapts
 
-The scientific gates explicitly check benchmark/gold validity before expensive runs, exact traceability of every number, and final claim calibration. Gold IDs/excerpts/source URLs/evaluation-only metadata are prohibited from retrieval decisions; final-test tuning, silent parse-failure dropping, and unmatched compute comparisons are explicitly audited.
+Each project provides an idea, data/material, and a target venue. The factory then:
+
+1. profiles the project and inferred subfield;
+2. searches recent works published in the target venue through OpenAlex;
+3. ranks them by topical proximity to the project;
+4. builds a local `venue_profile` from the nearest examples;
+5. loads one or more discipline packs;
+6. synthesizes a project-specific `research_contract`;
+7. uses that contract to design 4–8 research streams;
+8. selects one validated package as the paper backbone;
+9. runs a venue-aware gap analysis to decide which extensions are actually worth doing;
+10. proposes three paper architectures and reviews each from methods, field, and venue perspectives;
+11. drafts only after evidence/support/dropped-findings audits;
+12. runs number, claim, citation, venue-fit, and style audits before human review.
+
+The accepted/published papers are used to infer **conventions and evidentiary expectations**, never to copy wording. Common patterns in the sample are not treated as formal venue requirements.
 
 ## Quick start
 
-First prepare the LoN benchmark using the main repository README so these exist:
-
-\`\`\`text
-data/trace_inputs/trace_documents.jsonl
-data/trace_inputs/trace_questions.jsonl
-\`\`\`
-
-Then, from the repository root:
-
-\`\`\`bash
+```bash
 export OPENROUTER_API_KEY=...
 
-python research_factory/trace_factory.py init runs/trace_lon_paper \
-  --data data/trace_inputs/trace_documents.jsonl \
-  --data data/trace_inputs/trace_questions.jsonl \
-  --data configs \
-  --data scripts
+python research_factory/general_factory.py init runs/my_paper \
+  --question "My research question" \
+  --field "computational social science" \
+  --subfield "political communication" \
+  --venue "New Media & Society" \
+  --data path/to/data \
+  --backend openrouter
 
-# If outputs/ already contains TRACE/BM25 runs, include: --data outputs
+python research_factory/general_factory.py run runs/my_paper
+python research_factory/general_factory.py status runs/my_paper
+```
 
-python research_factory/trace_factory.py plan
-python research_factory/trace_factory.py run runs/trace_lon_paper
-\`\`\`
+DeepSeek through OpenRouter is the default model backend. `factory.json` stores the backend/model settings, and `--model` can override them at run time.
 
-\`init\` creates a detailed TRACE-specific \`checkpoint.md\` and a \`factory.json\`. Review both before spending API credits. The default model is configurable:
+## Discipline packs
 
-\`\`\`json
-{"backend": {"kind": "openrouter", "model": "deepseek/deepseek-chat-v3.1"}}
-\`\`\`
+```bash
+python research_factory/general_factory.py packs
+```
 
-Keep the model string synchronized with the DeepSeek version used in the main TRACE experiments. \`--model\` overrides it for a run.
+Current packs:
+
+- `nlp`
+- `computational_social_science`
+- `digital_humanities`
+- `historical_nlp`
+- `computational_literary_studies`
+- `information_retrieval`
+
+They are composable. For example:
+
+```bash
+python research_factory/general_factory.py init runs/stylometry \
+  --question "..." \
+  --field "NLP / computational literary studies" \
+  --subfield "authorship representation learning" \
+  --venue "EMNLP" \
+  --pack nlp \
+  --pack computational_literary_studies
+```
+
+If no pack is specified, the project profiler selects relevant packs from the field, subfield, and method family. A historical-RAG project can therefore combine NLP + information retrieval + digital humanities + historical NLP, while a survey paper can use computational social science without inheriting irrelevant benchmark conventions.
+
+## Venue scout
+
+The generic factory resolves the venue via OpenAlex, collects recent works published in that source, and ranks them against the project question/keywords. It writes:
+
+```text
+venue/scout_results.jsonl
+venue/scout_summary.json
+venue/papers/*.txt
+venue/venue_profile.json
+venue/venue_profile.md
+```
+
+The default window is five years and the top 24 papers are retained. When only abstracts are available, the profile is explicitly based on abstracts and must remain cautious about section/style claims.
+
+### Hand-pick the closest accepted papers
+
+For small or poorly indexed subfields, local examples are better:
+
+```bash
+python research_factory/general_factory.py init runs/project \
+  --question "..." \
+  --venue "Computational Humanities Research" \
+  --local-paper examples/accepted1.txt \
+  --local-paper examples/accepted2.txt \
+  --offline
+```
+
+The current compact implementation ingests local `.txt`/`.md` examples directly. PDFs can be converted to text beforehand. Without `--offline`, local examples augment the OpenAlex sample.
+
+OpenAlex publication in the resolved source is used as a practical proxy for an accepted/published paper. Track/workshop distinctions can be imperfect, so for conference targeting it is worth adding hand-picked examples from the exact track when possible.
+
+## Research contract
+
+After the venue profile and discipline packs are available, an agent writes:
+
+```text
+profiles/loaded_packs.md
+profiles/loaded_packs.json
+profiles/research_contract.md
+profiles/research_contract.json
+```
+
+The contract classifies expectations as `REQUIRED`, `STRONGLY_EXPECTED`, `OPTIONAL`, or `NOT_APPLICABLE`. This is where the same engine becomes different workflows in practice: a CSS project emphasizes construct validity, sampling, effect sizes and identification; NLP emphasizes baselines, ablations, leakage and stochasticity; DH emphasizes corpus/source critique, interpretability and movement between aggregate patterns and cases.
+
+## Venue-aware gap analysis
+
+Extensions are deliberately **not fixed in advance**. After one findings package is selected, the factory asks what evidence is still missing for this exact paper given the local venue sample and the research contract. It writes:
+
+```text
+extensions/gap_analysis.md
+extensions/extension_plan.json
+```
+
+Only extensions that can materially change confidence, interpretation, generalization, mechanism, or venue fit should be run.
+
+## Retarget the same project
+
+```bash
+python research_factory/general_factory.py retarget runs/my_paper \
+  --venue "TACL" \
+  --track "article"
+
+python research_factory/general_factory.py run runs/my_paper
+```
+
+Retargeting preserves the project files but resets workflow state so the venue profile, research planning, missing-evidence analysis, architecture, and draft can change. For expensive real projects, copying the run directory before retargeting is sensible if you want to preserve both trajectories.
 
 ## Smoke test
 
-\`\`\`bash
-python research_factory/trace_factory.py init /tmp/trace_factory_smoke --backend mock
-python research_factory/trace_factory.py run /tmp/trace_factory_smoke --backend mock
-python research_factory/trace_factory.py status /tmp/trace_factory_smoke
-\`\`\`
+The `mock` backend exercises the whole orchestration without API calls or research claims:
 
-A full mock run should finish at \`awaiting_human_review\` with 67 completed stages. Every stage is checkpointed in \`state.json\`; prompts/responses are stored under \`logs/\` and the event stream under \`provenance/events.jsonl\`.
+```bash
+python research_factory/general_factory.py init /tmp/factory_smoke \
+  --question "A test question" \
+  --field "digital humanities" \
+  --subfield "historical NLP" \
+  --venue "Mock Venue" \
+  --backend mock --offline
 
-## Files
+python research_factory/general_factory.py run /tmp/factory_smoke --backend mock
+```
 
-- \`trace_factory.py\` — orchestration, hard gates and CLI.
-- \`runtime.py\` — workspace, OpenRouter/DeepSeek backend, shell/file tools and mock backend.
-- \`prompts.py\` — TRACE-specific research heuristics, six findings directions and seven extensions.
+A successful smoke run ends at `awaiting_human_review`.
 
-## Security
+## Important limits
 
-Agents can run shell commands because evaluation may require Python and external TRACE scripts. A small list of obviously destructive commands is blocked, but this is **not a hardened sandbox**. Use a disposable environment for untrusted code/data.
+A venue profile is a sample, not a rulebook, and the factory does not predict acceptance. OpenAlex source resolution can be imperfect. The quality of the adaptation improves substantially when the user supplies the exact track/article type and a few hand-picked close accepted papers. Human judgment remains the final gate for problem selection, contribution importance, and whether the paper should actually be submitted in its current form.
