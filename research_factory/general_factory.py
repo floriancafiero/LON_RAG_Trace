@@ -168,31 +168,81 @@ def sim(q,title,ab):
     q,d=tok(q),tok((title or '')+' '+(ab or ''))
     return (len(q&d)/max(1,len(q))) if q else 0
 def getj(url):
-    req=urllib.request.Request(url,headers={'User-Agent':'ResearchFactory/0.3'});return json.loads(urllib.request.urlopen(req,timeout=60).read())
+    req=urllib.request.Request(url,headers={'User-Agent':'ResearchFactory/0.4'});return json.loads(urllib.request.urlopen(req,timeout=60).read())
+
+def _slug(s):
+    return re.sub(r'[^A-Za-z0-9_-]+','_',s or 'paper')[:70]
+
+def _extract_pdf(pdf,txt):
+    """Best-effort PDF-to-text; returns True only when useful text was extracted."""
+    try:
+        exe=shutil.which('pdftotext')
+        if exe:
+            r=subprocess.run([exe,'-layout',str(pdf),str(txt)],capture_output=True,text=True,timeout=120)
+            if r.returncode==0 and txt.exists() and txt.stat().st_size>1000:return True
+    except Exception:pass
+    try:
+        from pypdf import PdfReader
+        reader=PdfReader(str(pdf))
+        text='\n\n'.join((p.extract_text() or '') for p in reader.pages)
+        if len(text.strip())>1000:txt.write_text(text,errors='ignore');return True
+    except Exception:pass
+    return False
+
+def _download_pdf(url,dst,max_bytes=30*1024*1024):
+    try:
+        req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0 ResearchFactory/0.4','Accept':'application/pdf,*/*'})
+        with urllib.request.urlopen(req,timeout=60) as r:
+            data=r.read(max_bytes+1)
+        if len(data)>max_bytes or not data.startswith(b'%PDF'):return False
+        dst.write_bytes(data);return True
+    except Exception:return False
+
+def _source_score(requested,source):
+    a=re.sub(r'\W+','',str(requested).lower());b=re.sub(r'\W+','',str(source.get('display_name','')).lower())
+    if not a or not b:return 0
+    if a==b:return 100
+    if a in b or b in a:return 80
+    return 10*len(tok(requested)&tok(source.get('display_name','')))
+
 def scout(root,project):
-    vd=root/'venue';pd=vd/'papers';vd.mkdir(exist_ok=True);pd.mkdir(exist_ok=True)
-    v=project.get('target_venue','unknown');q=' '.join(project.get('keywords') or []) or project.get('question','');out=[]
+    vd=root/'venue';pd=vd/'papers';pdfd=pd/'pdf';vd.mkdir(exist_ok=True);pd.mkdir(exist_ok=True);pdfd.mkdir(exist_ok=True)
+    v=project.get('target_venue','unknown');q=' '.join(project.get('keywords') or []) or project.get('question','');out=[];resolved=None
     if not project.get('offline') and str(v).lower() not in {'unknown','auto','none',''}:
         srcs=getj('https://api.openalex.org/sources?'+urllib.parse.urlencode({'search':v,'per-page':10})).get('results') or []
         if srcs:
-            src=srcs[0];sid=src['id'].split('/')[-1];year=time.gmtime().tm_year;flt=f'primary_location.source.id:{sid},from_publication_date:{year-int(project.get("venue_years",5))+1}-01-01';url='https://api.openalex.org/works?'+urllib.parse.urlencode({'filter':flt,'per-page':100,'sort':'publication_date:desc','select':'id,doi,title,publication_year,primary_location,best_oa_location,abstract_inverted_index,cited_by_count'})
+            src=max(srcs,key=lambda x:_source_score(v,x));resolved={'id':src.get('id'),'display_name':src.get('display_name'),'type':src.get('type')}
+            sid=src['id'].split('/')[-1];year=time.gmtime().tm_year
+            flt=f'primary_location.source.id:{sid},from_publication_date:{year-int(project.get("venue_years",5))+1}-01-01'
+            url='https://api.openalex.org/works?'+urllib.parse.urlencode({'filter':flt,'per-page':100,'sort':'publication_date:desc','select':'id,doi,title,publication_year,primary_location,best_oa_location,abstract_inverted_index,cited_by_count'})
             for w in getj(url).get('results') or []:
-                ab=abstract(w.get('abstract_inverted_index'));loc=w.get('best_oa_location') or w.get('primary_location') or {};out.append({'title':w.get('title'),'year':w.get('publication_year'),'doi':w.get('doi'),'abstract':ab,'pdf_url':loc.get('pdf_url'),'landing_page_url':loc.get('landing_page_url'),'topic_similarity':sim(q,w.get('title'),ab)})
+                ab=abstract(w.get('abstract_inverted_index'));loc=w.get('best_oa_location') or w.get('primary_location') or {}
+                out.append({'title':w.get('title'),'year':w.get('publication_year'),'doi':w.get('doi'),'abstract':ab,'pdf_url':loc.get('pdf_url'),'landing_page_url':loc.get('landing_page_url'),'topic_similarity':sim(q,w.get('title'),ab),'source':'openalex'})
     for p0 in project.get('local_papers') or []:
         p=Path(p0).expanduser().absolute()
-        if p.exists():out.append({'title':p.stem,'year':None,'abstract':'','local_source':str(p),'topic_similarity':1.0})
+        if p.exists():out.append({'title':p.stem,'year':None,'abstract':'','local_source':str(p),'topic_similarity':1.0,'source':'local'})
     out.sort(key=lambda x:x.get('topic_similarity',0),reverse=True);out=out[:int(project.get('venue_keep',24))]
+    n_full=n_abstract=0
     with (vd/'scout_results.jsonl').open('w') as f:
-        for i,r in enumerate(out,1):
-            r=dict(r);r['rank']=i
+        for i,r0 in enumerate(out,1):
+            r=dict(r0);r['rank']=i
             if i<=int(project.get('venue_download_top',10)):
-                txt=pd/f'{i:02d}_{re.sub(r"[^A-Za-z0-9_-]+","_",r.get("title") or "paper")[:60]}.txt'
+                stem=f'{i:02d}_{_slug(r.get("title"))}';txt=pd/(stem+'.txt')
                 if r.get('local_source'):
                     src=Path(r['local_source'])
-                    if src.suffix.lower() in {'.txt','.md'}:txt.write_text(src.read_text(errors='replace'));r['extracted_text_path']=str(txt.relative_to(root))
-                elif r.get('abstract'):txt.write_text((r.get('title') or '')+'\n\n'+r['abstract']);r['extracted_text_path']=str(txt.relative_to(root));r['text_scope']='abstract_only'
+                    if src.suffix.lower() in {'.txt','.md'}:
+                        txt.write_text(src.read_text(errors='replace'));r['extracted_text_path']=str(txt.relative_to(root));r['text_scope']='full_text';n_full+=1
+                    elif src.suffix.lower()=='.pdf' and _extract_pdf(src,txt):
+                        r['extracted_text_path']=str(txt.relative_to(root));r['text_scope']='full_text';n_full+=1
+                elif r.get('pdf_url'):
+                    pdf=pdfd/(stem+'.pdf')
+                    if _download_pdf(r['pdf_url'],pdf) and _extract_pdf(pdf,txt):
+                        r['pdf_path']=str(pdf.relative_to(root));r['extracted_text_path']=str(txt.relative_to(root));r['text_scope']='full_text';n_full+=1
+                    elif pdf.exists():pdf.unlink()
+                if not r.get('extracted_text_path') and r.get('abstract'):
+                    txt.write_text((r.get('title') or '')+'\n\n'+r['abstract']);r['extracted_text_path']=str(txt.relative_to(root));r['text_scope']='abstract_only';n_abstract+=1
             f.write(json.dumps(r,ensure_ascii=False)+'\n')
-    (vd/'scout_summary.json').write_text(json.dumps({'venue_requested':v,'query':q,'n_kept':len(out),'warning':'Publication in the resolved venue is used as a proxy for accepted work; track/workshop distinctions may require manual filtering.'},indent=2))
+    (vd/'scout_summary.json').write_text(json.dumps({'venue_requested':v,'venue_resolved':resolved,'query':q,'n_kept':len(out),'full_text_examples':n_full,'abstract_only_examples':n_abstract,'warning':'Publication in the resolved OpenAlex venue is a proxy for accepted/published work; conference track/workshop distinctions may require manual filtering. Full-text extraction is best-effort and falls back to abstracts.'},indent=2))
 
 def choose_packs(profile,explicit):
     out=[]
